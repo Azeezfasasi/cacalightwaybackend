@@ -10,6 +10,7 @@ connectDB();
 app.use(cors({
   origin: [
     'https://caclightway.netlify.app',
+    'https://caclightway.com',
     'https://mgv-tech.com',
     'http://localhost:5173'
   ], // Your frontend URLs
