@@ -4,19 +4,20 @@ const cors = require('cors');
 const app = express();
 const connectDB = require('./config/db');
 
-const corsOptions = {
-  origin: 'http://localhost:5173',
-  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-  credentials: true,
-  optionsSuccessStatus: 204,
-};
-
-app.use(cors(corsOptions));
-
 // Connect to MongoDB
 connectDB();
 
-// app.use(express.json());
+app.use(cors({
+  origin: [
+    'https://caclightway.netlify.app',
+    'https://mgv-tech.com',
+    'http://localhost:5173'
+  ], // Your frontend URLs
+  credentials: true, // Allow cookies/auth headers to be sent
+  methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'PATCH'], // Explicitly allowed methods
+  allowedHeaders: ['Content-Type', 'Authorization'], // Explicitly allowed headers
+  optionsSuccessStatus: 204, // Status for preflight requests
+}));
 
 // Fix for large base64 uploads
 app.use(express.json({ limit: '10mb' }));
