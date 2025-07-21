@@ -13,23 +13,74 @@ const generateToken = (id, role) => {
   });
 };
 
+// exports.register = async (req, res) => {
+//   try {
+//     const { name, email, password, role, phoneNumber, gender } = req.body;
+//     let user = await User.findOne({ email });
+//     if (user) return res.status(400).json({ message: 'User already exists' });
+//     const hashedPassword = await bcrypt.hash(password, 10);
+//     user = new User({ name, email, password: hashedPassword, role, phoneNumber, gender });
+//     await user.save();
+//     // Send welcome email
+//     await sendMail(email, 'Welcome to CAC Lightway', `<p>Hi ${name}, welcome to CAC Lightway Assembly!</p>`);
+//     res.status(201).json({ message: 'User registered successfully' });
+//   } catch (err) {
+//     res.status(500).json({ message: err.message });
+//   }
+// };
+
 exports.register = async (req, res) => {
   try {
     const { name, email, password, role, phoneNumber, gender } = req.body;
+    
+    console.log('--- Incoming Register Request ---');
+    console.log('Raw req.body:', req.body);
+    console.log('Registering email:', email);
+
     let user = await User.findOne({ email });
-    if (user) return res.status(400).json({ message: 'User already exists' });
+    if (user) {
+      console.log('Registration failed: User already exists for email:', email);
+      return res.status(400).json({ message: 'User already exists' });
+    }
+    
+    // DEBUG: Log plain text password before hashing
+    console.log('Register Debug: Plain text password for hashing:', password);
+
     const hashedPassword = await bcrypt.hash(password, 10);
+    
+    // DEBUG: Log the hashed password immediately after hashing
+    console.log('Register Debug: Hashed password generated:', hashedPassword);
+    console.log('Register Debug: Length of hashed password:', hashedPassword.length);
+
     user = new User({ name, email, password: hashedPassword, role, phoneNumber, gender });
     await user.save();
-    // Send welcome email
+    
+    console.log('Registration successful: User saved to DB:', user.email);
+    // Optional: Send welcome email (ensure sendMail is correctly configured)
     await sendMail(email, 'Welcome to CAC Lightway', `<p>Hi ${name}, welcome to CAC Lightway Assembly!</p>`);
-    res.status(201).json({ message: 'User registered successfully' });
+    
+    // If you want to log in the user immediately after registration and send a token:
+    const token = generateToken(user._id, user.role);
+    res.status(201).json({ 
+      message: 'User registered successfully',
+      token, // Send token on successful registration
+      user: { // Send user details
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        phoneNumber: user.phoneNumber,
+        gender: user.gender
+      }
+    });
+
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error('Registration Error:', err.message, err.stack); // Log stack for more details
+    res.status(500).json({ message: 'Server error during registration: ' + err.message });
   }
 };
 
-// exports.login = async (req, res) => {
+// exports.login = asyncHandler(async (req, res) => { // Wrap with asyncHandler
 //   try {
 //     console.log('--- Incoming Login Request ---');
 //     console.log('Raw req.body:', req.body);
@@ -39,37 +90,54 @@ exports.register = async (req, res) => {
 //     console.log('Extracted email:', email, 'Type:', typeof email);
 //     console.log('Extracted password:', password, 'Type:', typeof password);
     
-//      // Add a quick type check before Mongoose interaction
+//     // Add a quick type check before Mongoose interaction
 //     if (typeof email !== 'string' || typeof password !== 'string') {
 //       console.error('Validation Error: Email or password is not a string. Received types:', typeof email, typeof password);
 //       return res.status(400).json({ message: 'Invalid input: Email and password must be strings.' });
 //     }
     
 //     const user = await User.findOne({ email });
+
+//     // DEBUG: Check if user was found
 //     if (!user) {
 //       console.log('Login failed: User not found for email:', email);
-//       return res.status(400).json({ message: 'Invalid credentials' });
+//       return res.status(400).json({ message: 'Invalid credentials' }); // User not found
 //     }
+//     console.log('Login Step 1: User found in DB:', user.email);
+
+//     // DEBUG: Check user status before password comparison
 //     if (user.isDisabled || user.isSuspended) {
 //       console.log('Login failed: Account disabled or suspended for user:', email);
 //       return res.status(403).json({ message: 'Account disabled or suspended' });
 //     }
+//     console.log('Login Step 2: User account is active.');
+
+//     // DEBUG: Log passwords for comparison (DO NOT DO THIS IN PRODUCTION)
+//     console.log('Login Debug: Plain text password from request:', password);
+//     console.log('Login Debug: Hashed password from DB:', user.password);
+
 //     const isMatch = await bcrypt.compare(password, user.password);
+
+//     // DEBUG: Log comparison result
+//     console.log('Login Step 3: Password match result (isMatch):', isMatch);
+
 //     if (!isMatch) {
 //       console.log('Login failed: Password mismatch for user:', email);
-//       return res.status(400).json({ message: 'Invalid credentials' });
+//       return res.status(400).json({ message: 'Invalid credentials' }); // Password mismatch
 //     }
     
-//     const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '1d' });
-//     console.log('--- LOGIN CONTROLLER ---');
+//     const token = generateToken(user._id, user.role);
+//     console.log('--- LOGIN CONTROLLER SUCCESS ---');
 //     console.log('Token generated for user:', user.email, 'Role:', user.role);
-//     console.log('JWT_SECRET used for signing:', process.env.JWT_SECRET); // DEBUG: Log the secret used for signing
-//     res.json({ token, user });
+//     console.log('JWT_SECRET used for signing:', process.env.JWT_SECRET);
+    
+//     res.json({ token, user }); // Send token and user object
 //   } catch (err) {
-//     res.status(500).json({ message: err.message });
+//     console.error('Login Error:', err.message); // Log the actual error message
+//     res.status(500).json({ message: 'Server error during login: ' + err.message });
 //   }
-// };
-exports.login = asyncHandler(async (req, res) => { // Wrap with asyncHandler
+// });
+exports.login = asyncHandler(async (req, res) => { 
   try {
     console.log('--- Incoming Login Request ---');
     console.log('Raw req.body:', req.body);
@@ -79,7 +147,6 @@ exports.login = asyncHandler(async (req, res) => { // Wrap with asyncHandler
     console.log('Extracted email:', email, 'Type:', typeof email);
     console.log('Extracted password:', password, 'Type:', typeof password);
     
-    // Add a quick type check before Mongoose interaction
     if (typeof email !== 'string' || typeof password !== 'string') {
       console.error('Validation Error: Email or password is not a string. Received types:', typeof email, typeof password);
       return res.status(400).json({ message: 'Invalid input: Email and password must be strings.' });
@@ -87,32 +154,28 @@ exports.login = asyncHandler(async (req, res) => { // Wrap with asyncHandler
     
     const user = await User.findOne({ email });
 
-    // DEBUG: Check if user was found
     if (!user) {
       console.log('Login failed: User not found for email:', email);
-      return res.status(400).json({ message: 'Invalid credentials' }); // User not found
+      return res.status(400).json({ message: 'Invalid credentials' });
     }
     console.log('Login Step 1: User found in DB:', user.email);
 
-    // DEBUG: Check user status before password comparison
     if (user.isDisabled || user.isSuspended) {
       console.log('Login failed: Account disabled or suspended for user:', email);
       return res.status(403).json({ message: 'Account disabled or suspended' });
     }
     console.log('Login Step 2: User account is active.');
 
-    // DEBUG: Log passwords for comparison (DO NOT DO THIS IN PRODUCTION)
     console.log('Login Debug: Plain text password from request:', password);
     console.log('Login Debug: Hashed password from DB:', user.password);
 
     const isMatch = await bcrypt.compare(password, user.password);
 
-    // DEBUG: Log comparison result
     console.log('Login Step 3: Password match result (isMatch):', isMatch);
 
     if (!isMatch) {
       console.log('Login failed: Password mismatch for user:', email);
-      return res.status(400).json({ message: 'Invalid credentials' }); // Password mismatch
+      return res.status(400).json({ message: 'Invalid credentials' });
     }
     
     const token = generateToken(user._id, user.role);
@@ -120,9 +183,9 @@ exports.login = asyncHandler(async (req, res) => { // Wrap with asyncHandler
     console.log('Token generated for user:', user.email, 'Role:', user.role);
     console.log('JWT_SECRET used for signing:', process.env.JWT_SECRET);
     
-    res.json({ token, user }); // Send token and user object
+    res.json({ token, user });
   } catch (err) {
-    console.error('Login Error:', err.message); // Log the actual error message
+    console.error('Login Error:', err.message);
     res.status(500).json({ message: 'Server error during login: ' + err.message });
   }
 });
