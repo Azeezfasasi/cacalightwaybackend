@@ -43,28 +43,24 @@ exports.register = async (req, res) => {
       return res.status(400).json({ message: 'User already exists' });
     }
     
-    // DEBUG: Log plain text password before hashing
-    console.log('Register Debug: Plain text password for hashing:', password);
-
-    const hashedPassword = await bcrypt.hash(password, 10);
+    // --- REMOVE THIS LINE: const hashedPassword = await bcrypt.hash(password, 10); ---
+    // The pre('save') hook in the User model will handle hashing automatically.
     
-    // DEBUG: Log the hashed password immediately after hashing
-    console.log('Register Debug: Hashed password generated:', hashedPassword);
-    console.log('Register Debug: Length of hashed password:', hashedPassword.length);
+    user = new User({ name, email, password, role, phoneNumber, gender }); // Pass plain text password
+    await user.save(); // The pre('save') hook will hash 'password' before saving
 
-    user = new User({ name, email, password: hashedPassword, role, phoneNumber, gender });
-    await user.save();
-    
     console.log('Registration successful: User saved to DB:', user.email);
-    // Optional: Send welcome email (ensure sendMail is correctly configured)
+    console.log('Registered User (after save, with hashed password):', user.password); // Verify it's hashed
+    
+    // Optional: Send welcome email
     await sendMail(email, 'Welcome to CAC Lightway', `<p>Hi ${name}, welcome to CAC Lightway Assembly!</p>`);
     
     // If you want to log in the user immediately after registration and send a token:
     const token = generateToken(user._id, user.role);
     res.status(201).json({ 
       message: 'User registered successfully',
-      token, // Send token on successful registration
-      user: { // Send user details
+      token, 
+      user: { 
         _id: user._id,
         name: user.name,
         email: user.email,
@@ -75,8 +71,49 @@ exports.register = async (req, res) => {
     });
 
   } catch (err) {
-    console.error('Registration Error:', err.message, err.stack); // Log stack for more details
+    console.error('Registration Error:', err.message, err.stack); 
     res.status(500).json({ message: 'Server error during registration: ' + err.message });
+  }
+};
+
+exports.login = async (req, res) => {
+  try {
+    console.log('--- Incoming Login Request ---');
+    console.log('Raw req.body:', req.body);
+    
+    const { email, password } = req.body;
+    
+    console.log('Extracted email:', email, 'Type:', typeof email);
+    console.log('Extracted password:', password, 'Type:', typeof password);
+    
+     // Add a quick type check before Mongoose interaction
+    if (typeof email !== 'string' || typeof password !== 'string') {
+      console.error('Validation Error: Email or password is not a string. Received types:', typeof email, typeof password);
+      return res.status(400).json({ message: 'Invalid input: Email and password must be strings.' });
+    }
+    
+    const user = await User.findOne({ email });
+    if (!user) {
+      console.log('Login failed: User not found for email:', email);
+      return res.status(400).json({ message: 'Invalid credentials' });
+    }
+    if (user.isDisabled || user.isSuspended) {
+      console.log('Login failed: Account disabled or suspended for user:', email);
+      return res.status(403).json({ message: 'Account disabled or suspended' });
+    }
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      console.log('Login failed: Password mismatch for user:', email);
+      return res.status(400).json({ message: 'Invalid credentials' });
+    }
+    
+    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '1d' });
+    console.log('--- LOGIN CONTROLLER ---');
+    console.log('Token generated for user:', user.email, 'Role:', user.role);
+    console.log('JWT_SECRET used for signing:', process.env.JWT_SECRET); // DEBUG: Log the secret used for signing
+    res.json({ token, user });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 };
 
@@ -137,58 +174,6 @@ exports.register = async (req, res) => {
 //     res.status(500).json({ message: 'Server error during login: ' + err.message });
 //   }
 // });
-exports.login = asyncHandler(async (req, res) => { 
-  try {
-    console.log('--- Incoming Login Request ---');
-    console.log('Raw req.body:', req.body);
-    
-    const { email, password } = req.body;
-    
-    console.log('Extracted email:', email, 'Type:', typeof email);
-    console.log('Extracted password:', password, 'Type:', typeof password);
-    
-    if (typeof email !== 'string' || typeof password !== 'string') {
-      console.error('Validation Error: Email or password is not a string. Received types:', typeof email, typeof password);
-      return res.status(400).json({ message: 'Invalid input: Email and password must be strings.' });
-    }
-    
-    const user = await User.findOne({ email });
-
-    if (!user) {
-      console.log('Login failed: User not found for email:', email);
-      return res.status(400).json({ message: 'Invalid credentials' });
-    }
-    console.log('Login Step 1: User found in DB:', user.email);
-
-    if (user.isDisabled || user.isSuspended) {
-      console.log('Login failed: Account disabled or suspended for user:', email);
-      return res.status(403).json({ message: 'Account disabled or suspended' });
-    }
-    console.log('Login Step 2: User account is active.');
-
-    console.log('Login Debug: Plain text password from request:', password);
-    console.log('Login Debug: Hashed password from DB:', user.password);
-
-    const isMatch = await bcrypt.compare(password, user.password);
-
-    console.log('Login Step 3: Password match result (isMatch):', isMatch);
-
-    if (!isMatch) {
-      console.log('Login failed: Password mismatch for user:', email);
-      return res.status(400).json({ message: 'Invalid credentials' });
-    }
-    
-    const token = generateToken(user._id, user.role);
-    console.log('--- LOGIN CONTROLLER SUCCESS ---');
-    console.log('Token generated for user:', user.email, 'Role:', user.role);
-    console.log('JWT_SECRET used for signing:', process.env.JWT_SECRET);
-    
-    res.json({ token, user });
-  } catch (err) {
-    console.error('Login Error:', err.message);
-    res.status(500).json({ message: 'Server error during login: ' + err.message });
-  }
-});
 
 exports.forgotPassword = async (req, res) => {
   try {
