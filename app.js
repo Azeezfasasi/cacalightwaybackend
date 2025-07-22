@@ -11,6 +11,7 @@ app.use(cors({
   origin: [
     'https://caclightway.netlify.app',
     'https://caclightway.com',
+    'http://caclightway.com',
     'http://localhost:5173'
   ], // Your frontend URLs
   credentials: true, // Allow cookies/auth headers to be sent
